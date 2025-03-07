@@ -173,12 +173,38 @@ namespace AMWin_RichPresence {
             // TODO add support for multiple beta versions (i.e. b1 and b2)
             if (numverRemote > numverLocal || (numverRemote == numverLocal && verLocal.Contains('b') && !verRemote.Contains('b'))) {
                 var res = MessageBox.Show("A new update for AMWin-RP is available.\nWould you like to view the releases?", "New update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
-                if (res == MessageBoxResult.Yes) {
-                    Process.Start(new ProcessStartInfo {
-                        FileName = Constants.GithubReleasesUrl,
-                        UseShellExecute = true
-                    });
-                }
+                if (res == MessageBoxResult.Yes)
+        {
+            var assets = json.RootElement.GetProperty("assets").EnumerateArray();
+            var asset = assets.FirstOrDefault(a => !a.GetProperty("name").GetString().Contains("NoRuntime")); // Ignore "NoRuntime" versions
+            
+            if (asset.ValueKind == JsonValueKind.Undefined)
+            {
+                MessageBox.Show("No valid update file found!", "Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            var downloadUrl = asset.GetProperty("browser_download_url").GetString();
+            var zipPath = Path.Combine(Path.GetTempPath(), "AMWinRP_Update.zip");
+            var extractPath = @"C:\Program Files\AMWinRP\"; // Change this to your installation path
+
+            using (var downloadStream = await Constants.HttpClient.GetStreamAsync(downloadUrl))
+            using (var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await downloadStream.CopyToAsync(fileStream);
+            }
+
+            // Start extraction in a new process
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/C timeout /t 3 & powershell -Command \"Expand-Archive -Path '{zipPath}' -DestinationPath '{extractPath}' -Force\" & timeout /t 2 & start \"\" \"{Path.Combine(extractPath, "AMWinRP.exe")}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+
+            Environment.Exit(0);
+        }
             }
         }
     }
